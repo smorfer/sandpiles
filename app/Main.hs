@@ -151,7 +151,7 @@ main = do
       let reduced = (reduce 1 $ m - (reduce 1 m))
       putStrLn "Simulated Toppling"
       let image = (\m -> generateImage (generator m) size size) reduced
-      writeBitmap "toppled" ++ show size ++ ".bmp" image
+      writeBitmap ("toppled" ++ show size ++ ".bmp") image
       putStrLn "Wrote Bitmap to disk"
     else do
       putStrLn "Starting Toppling Recording"
