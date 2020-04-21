@@ -12,40 +12,12 @@ import qualified Data.Vector                   as V
 import           Debug.Trace                   as D
 import           Control.DeepSeq
 
-
-{-
-data MatrixPartition
-  = TL -- Top Left
-  | TM -- Top Middle
-  | TR -- Top Right
-  | ML -- Mid Left
-  | MM -- Mid Middle
-  | MR -- Mid Right
-  | BL -- Bot Left
-  | BM -- Bot Middle
-  | BR -- Bot Right
-
-
-coordToPartition :: Int -> Int -> (Int, Int) -> MatrixPartition
-coordToPartition nr nc (r, c) =
-  | r == 1 
-  (1 , 1 ) -> TL
-  (1 , nc) -> TR
-  (1 , _ ) -> TM
-  (nr, 1 ) -> BL
-  (nr, nc) -> BR
-  (nr, _ ) -> BM
-  (r , 1 ) -> ML
-  (r , nc) -> MR
-  (r , c ) -> MM
--}
-
 pileToColor :: Int -> PixelRGB8
 pileToColor = \case
   0 -> PixelRGB8 0 0 0
-  1 -> PixelRGB8 0 0 255
+  1 -> PixelRGB8 255 0 0
   2 -> PixelRGB8 0 255 255
-  3 -> PixelRGB8 255 0 0
+  3 -> PixelRGB8 0 0 255
   n -> PixelRGB8 255 255 255
 
 isUnstable :: Matrix Int -> Bool
