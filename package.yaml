@@ -25,7 +25,6 @@ dependencies:
 - JuicyPixels
 - vector
 - deepseq
-- matrices
 
 library:
   source-dirs: src
