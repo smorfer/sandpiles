@@ -1,142 +1,139 @@
-{-# LANGUAGE LambdaCase #-}
-
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE QuasiQuotes           #-}
+{-# LANGUAGE TemplateHaskellQuotes #-}
 
 module Main where
 
-import           Lib
-
-import           Data.Matrix
-
 import           Codec.Picture
-import qualified Data.Vector                   as V
-import           Debug.Trace                   as D
 import           Control.DeepSeq
+import           Data.Array.Repa
+import           Data.Array.Repa.Stencil
+import           Data.Array.Repa.Stencil.Dim2
+import qualified Data.Vector.Unboxed          as V
+import           Debug.Trace                  as D
+import qualified GHC.Base                     as B
+import           Prelude                      hiding (map)
+
+import           Control.Stabilization
+import           Data.Sandpile
 
 pileToColor :: Int -> PixelRGB8
-pileToColor = \case
-  0 -> PixelRGB8 0 0 0
-  1 -> PixelRGB8 255 0 0
-  2 -> PixelRGB8 0 255 255
-  3 -> PixelRGB8 0 0 255
-  n -> PixelRGB8 255 255 255
+pileToColor =
+  \case
+    0 -> PixelRGB8 0 0 0
+    1 -> PixelRGB8 255 0 0
+    2 -> PixelRGB8 0 255 255
+    3 -> PixelRGB8 0 0 255
+    n -> PixelRGB8 255 255 255
 
-isUnstable :: Matrix Int -> Bool
-isUnstable = foldr (\n b -> n > 3 || b) False
-
-getUnstables :: Matrix Int -> [(Int, Int)]
-getUnstables m = getter (nrows m) (ncols m) m
- where
-  getter :: Int -> Int -> Matrix Int -> [(Int, Int)]
-  getter 1 1 m = if gT3 1 1 m then [(1, 1)] else []
-  getter r 1 m = if gT3 r 1 m
-    then (r, 1) : getter (r - 1) (ncols m) m
-    else getter (r - 1) (ncols m) m
-  getter r c m =
-    if gT3 r c m then (r, c) : getter r (c - 1) m else getter r (c - 1) m
-
-  gT3 :: Int -> Int -> Matrix Int -> Bool
-  gT3 r c m = getElem r c m > 3
-
-toppleUnstables :: [(Int, Int)] -> Matrix Int -> Matrix Int
-toppleUnstables [] m = m
-toppleUnstables ((r, c) : us) m
-  | r == 1 && c == 1
-  = toppleUnstables us $ updateSelf r c $ updateBottom r c $ updateRight r c m
-  | r == 1 && c == (ncols m)
-  = toppleUnstables us $ updateSelf r c $ updateBottom r c $ updateLeft r c m
-  | r == (nrows m) && c == 1
-  = toppleUnstables us $ updateSelf r c $ updateTop r c $ updateRight r c m
-  | r == (nrows m) && c == (ncols m)
-  = toppleUnstables us $ updateSelf r c $ updateLeft r c $ updateTop r c m
-  | r == 1
-  = toppleUnstables us
-    $ updateSelf r c
-    $ updateLeft r c
-    $ updateBottom r c
-    $ updateRight r c m
-  | c == 1
-  = toppleUnstables us
-    $ updateSelf r c
-    $ updateRight r c
-    $ updateTop r c
-    $ updateBottom r c m
-  | r == (nrows m)
-  = toppleUnstables us
-    $ updateSelf r c
-    $ updateTop r c
-    $ updateLeft r c
-    $ updateRight r c m
-  | c == (ncols m)
-  = toppleUnstables us
-    $ updateSelf r c
-    $ updateLeft r c
-    $ updateTop r c
-    $ updateBottom r c m
-  | otherwise
-  = toppleUnstables us
-    $ updateSelf r c
-    $ updateLeft r c
-    $ updateTop r c
-    $ updateRight r c
-    $ updateBottom r c m
- where
-  updateElem change r c m = setElem ((getElem r c m) + change) (r, c) m
-  updateSelf r c = updateElem (-4) r c
-  updateLeft r c = updateElem 1 r (c - 1)
-  updateTop r c = updateElem 1 (r - 1) c
-  updateRight r c = updateElem 1 r (c + 1)
-  updateBottom r c = updateElem 1 (r + 1) c
-
-reduce :: Int -> Matrix Int -> Matrix Int
-reduce count m = if isUnstable m
-  then
-    let nunstable = getUnstables m
-        newM      = toppleUnstables nunstable m
-    in  D.trace ("#T: " ++ show count ++ " #U: " ++ (show $ length nunstable))
-                newM
-        `deepseq` reduce (count + 1)
-        $         newM
-  else m
-
-recordReduce :: Int -> Matrix Int -> [Matrix Int]
-recordReduce count m = if isUnstable m
-  then
-    let nunstable = getUnstables m
-        newM      = toppleUnstables (getUnstables m) m
-    in  D.trace ("#T: " ++ show count ++ " #U: " ++ (show $ length nunstable))
-                newM
-        `deepseq` newM
-        :         recordReduce (count + 1) newM
-  else [m]
-
+pileToGreyScale :: Int -> PixelRGB8
+pileToGreyScale =
+  \case
+    0 -> PixelRGB8 0 0 0
+    1 -> PixelRGB8 32 32 32
+    2 -> PixelRGB8 64 64 64
+    3 -> PixelRGB8 128 128 128
+    n -> PixelRGB8 255 255 255
 
 -- I = R(S - R(S))
 main :: IO ()
 main = do
-  let size   = 32
-      m3     = (matrix size size (\(x, y) -> 3))
-      m      = (matrix size size (\(x, y) -> 6))
-      record = False
-  if not record
-    then do
-      putStrLn "Starting Toppling Simulation"
-      let reduced = (reduce 1 $ m - (reduce 1 m))
-      putStrLn "Simulated Toppling"
-      let image = (\m -> generateImage (generator m) size size) reduced
-      writeBitmap ("toppled" ++ show size ++ ".bmp") image
-      putStrLn "Wrote Bitmap to disk"
-    else do
-      putStrLn "Starting Toppling Recording"
-      let reducedRecorded = m : recordReduce 1 m
-          images =
-            (\m -> generateImage (generator m) size size) <$> reducedRecorded
-          write = writeGifAnimation ("./toppling-" ++ show size ++ ".gif")
-                                    1
-                                    LoopingForever
-                                    images
-      case write of
-        Left  str    -> putStrLn $ "Failed: " ++ str
-        Right action -> putStrLn "Saved Gif" >> action
- where
-  generator :: Matrix Int -> Int -> Int -> PixelRGB8
-  generator m x y = pileToColor $ m ! (x + 1, y + 1)
+  putStrLn "Generating pile"
+  let !filledWith6 = filledPile 6 128
+  putStrLn "Stabilizing filled pile"
+  stabilized <- stabilize filledWith6
+  putStrLn "Subtracting piles"
+  subtracted <-
+    (\pile -> Pile pile (pileSize filledWith6)) <$>
+    (computeUnboxedP $ (toArray filledWith6) -^ (toArray stabilized))
+  putStrLn "Stabilizing identity"
+  identity <- stabilize subtracted
+  putStrLn "Converting to pixels"
+  let !images =
+        (\m ->
+           generateImage
+             (generator pileToGreyScale m)
+             (pileSize stabilized)
+             (pileSize stabilized))
+          (toArray identity)
+  putStrLn "Writing image to disk"
+  writeBitmap
+    ("computed_sandpiles/toppled-" B.++ (show $ pileSize stabilized) B.++ ".bmp")
+    images
+  putStrLn "Task done"
+  where
+    generator ::
+         (Pixel px) => (Int -> px) -> Array U DIM2 Int -> Int -> Int -> px
+    generator g !m !x !y = g $ m ! (Z :. x :. y)
+
+main' :: IO ()
+main' = do
+  let size = 512
+      isIdent = True
+      !at = Z :. (size :: Int) :. (size :: Int)
+      !sixes = fromListUnboxed at (take (size * size) $ repeat 6 :: [Int])
+      boundarySize = (size ^ 2 - 1) `div` 2
+      -- !singlePile  = fromListUnboxed
+        -- at
+        -- ((    (take boundarySize (repeat 0))
+         -- B.++ [100000]
+         -- B.++ (take boundarySize (repeat 0))
+         -- ) :: [Int]
+        -- )
+      -- !imagesSubtracted =
+        -- (\m -> generateImage (generator pileToGreyScale m) size size) computed
+      -- !write = writeGifAnimation ("toppling-" B.++ show size B.++ ".gif")
+         --                        1
+         --                        LoopingForever
+         --                        images
+  --case write of
+    --Left  str    -> putStrLn str
+    --Right action -> putStrLn "Saved Gif" >> action
+  -- writeBitmap
+    -- ("computed_sandpiles/toppled-subtract-" B.++ (show size) B.++ "w5.bmp")
+    -- imagesSubtracted
+  putStrLn "Wrote Bitmap to disk"
+  where
+    topple :: Int -> Array U DIM2 Int -> IO (Array U DIM2 Int)
+    topple count a = do
+      let !st =
+            [stencil2|  0 1 0
+                          1 0 1
+                          0 1 0 |]
+          !bin =
+            map
+              (\a ->
+                 if a > 3
+                   then 1
+                   else 0)
+              a
+          !convoluted = mapStencil2 (BoundConst 0) st bin
+          !stabilized = a +^ convoluted -^ (map (* 4) bin)
+      computed <- computeP stabilized
+      let unstable = V.any (> 3) $ toUnboxed computed
+      D.trace ("#Topple: " B.++ (show count)) return ()
+      if unstable
+        then topple (count + 1) computed
+        else return computed
+    toppleRecord :: Int -> Array U DIM2 Int -> IO ([Array U DIM2 Int])
+    toppleRecord count a = do
+      let !st =
+            [stencil2|  0 1 0
+                          1 0 1
+                          0 1 0 |]
+          !bin =
+            map
+              (\a ->
+                 if a > 3
+                   then 1
+                   else 0)
+              a
+          !convoluted = mapStencil2 (BoundConst 0) st bin
+          !stabilized = a +^ convoluted -^ (map (* 4) bin)
+      computed <- computeP stabilized
+      let unstable = V.any (> 3) $ toUnboxed computed
+      D.trace ("#Topple: " B.++ (show count)) return ()
+      if unstable
+        then (computed :) <$> (toppleRecord (count + 1) computed)
+        else return [computed]

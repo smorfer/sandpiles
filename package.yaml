@@ -25,6 +25,7 @@ dependencies:
 - JuicyPixels
 - vector
 - deepseq
+- repa
 
 library:
   source-dirs: src
@@ -34,8 +35,12 @@ executables:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
-    - -threaded
     - -rtsopts
+    - -threaded
+    - -fno-liberate-case
+    - -funfolding-use-threshold1000
+    - -funfolding-keeness-factor1000
+    - -optlo-O3
     - -with-rtsopts=-N
     dependencies:
     - sandpiles

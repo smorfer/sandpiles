@@ -1,0 +1,3 @@
+module Control.Identity
+  (
+  ) where
