@@ -18,16 +18,19 @@ import           Data.Sandpile.Stencil
 
 topple :: Monad m => Sandpile StaticPile -> m (Sandpile StaticPile)
 topple (Pile pile size) = do
-  let !binaryMap =
-        R.map
-          (\a ->
-             if a > 3
-               then 1
-               else 0)
-          pile
-      !convoluted = mapStencil2 (BoundConst 0) toppleStencil binaryMap
-      !stabilized = pile +^ convoluted -^ (R.map (* 4) binaryMap)
-  ((flip Pile) size) <$> R.computeP stabilized
+  !binaryMap <-
+    R.computeUnboxedP $
+    R.map
+      (\a ->
+         (if a > 3
+            then 1
+            else 0))
+      pile
+  !convoluted <-
+    R.computeUnboxedP $ mapStencil2 (BoundConst 0) toppleStencil binaryMap
+  !stabilized <-
+    R.computeUnboxedP $ pile +^ convoluted -^ (R.map (* 4) binaryMap)
+  return $ Pile stabilized size
 
 stabilize :: Monad m => Sandpile StaticPile -> m (Sandpile StaticPile)
 stabilize sandpile@(Pile pile _) =
