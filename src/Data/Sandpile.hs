@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE TypeSynonymInstances #-}
+
 
 module Data.Sandpile
   ( Sandpile(..)
@@ -46,7 +46,7 @@ zeroPile size =
   Pile
     (fromListUnboxed
        (Z :. (size :: Int) :. (size :: Int))
-       (take (size * size) $ repeat 0 :: [Int]))
+       (replicate (size * size) 0 :: [Int]))
     size
 
 filledPile :: Fill -> Size -> Sandpile StaticPile
@@ -54,5 +54,5 @@ filledPile fill size =
   Pile
     (fromListUnboxed
        (Z :. (size :: Int) :. (size :: Int))
-       (take (size * size) $ repeat fill :: [Int]))
+       (replicate (size * size) fill :: [Int]))
     size
